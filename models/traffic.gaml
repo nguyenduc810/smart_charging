@@ -17,6 +17,97 @@ global {
 	float lane_width <- 1.0;
 	list<int> CHARGING_RATES <- [250, 150, 120, 60, 30, 22, 11, 7];
 	float simulation_hour <- 0.0 update: simulation_hour + step/60;
+	map<string, float> ev_battery_capacity <- [
+        // VinFast
+        "VFe34"::42.0,
+        "VF5"::37.23,
+        "VF6"::59.6,
+        "VF8"::87.7,
+        "VF9"::123.0,
+        // Hyundai
+        "IONIQ5"::72.6,
+        "KONA"::64.0,
+        // KIA
+        "EV6"::77.4,
+        // Mercedes
+        "EQS"::107.8,
+        // BMW
+        "iX3"::80.0,
+        // Tesla
+        "Model3"::60.0,
+        "ModelY"::75.0
+    ];
+    
+    // Battery threshold (minimum level before seeking charging)
+    map<string, float> ev_battery_threshold <- [
+        // VinFast
+        "VFe34"::8.0,
+        "VF5"::7.0,
+        "VF6"::12.0,
+        "VF8"::20.0,
+        "VF9"::20.0,
+        // Other brands
+        "IONIQ5"::15.0,
+        "KONA"::12.0,
+        "EV6"::15.0,
+        "EQS"::20.0,
+        "iX3"::16.0,
+        "Model3"::12.0,
+        "ModelY"::15.0
+    ];
+    // Charging rates for different power levels (kW to % per minute)
+    map<string, map<int, float>> ev_charging_rates <- [
+        "VFe34"::[
+            250::0.0,  // Not supported
+            150::0.0,  // Not supported
+            120::0.0,  // Not supported
+            60::2.5,   // 10-70% in 30 min
+            30::1.25,
+            22::0.42,  // 0-100% in 8 hours
+            11::0.21,
+            7::0.13    // 0-100% in 13 hours
+        ],
+        "VF8"::[
+            250::3.33, // 10-70% in 24 min
+            150::2.5,  // 10-70% in 31 min
+            120::2.0,
+            60::1.0,
+            30::0.5,
+            22::0.167, // 0-100% in 10 hours
+            11::0.083,
+            7::0.053   // 0-100% in 15 hours
+        ],
+        "VF9"::[
+            250::3.33, // 10-70% in 26 min
+            150::2.5,  // 10-70% in 35 min
+            120::2.0,
+            60::1.0,
+            30::0.5,
+            22::0.152, // 0-100% in 11 hours
+            11::0.076,
+            7::0.048   // 0-100% in 17 hours
+        ],
+        "IONIQ5"::[
+            250::4.67, // 10-80% in 18 min
+            150::2.8,
+            120::2.24,
+            60::1.12,
+            30::0.56,
+            22::0.238, // 0-100% in 7 hours
+            11::0.119,
+            7::0.076
+        ],
+        "EV6"::[
+            250::4.67, // 10-80% in 18 min
+            150::2.8,
+            120::2.24,
+            60::1.12,
+            30::0.56,
+            22::0.238, // 0-100% in 7 hours
+            11::0.119,
+            7::0.076
+        ]
+    ];
 }
 
 
@@ -72,6 +163,16 @@ species charging_station {
     int vehicles_waited <- 0;
     list<vehicle> waiting_queue;
     intersection closest_intersection <- intersection closest_to self;
+    map<int, int> port_map <- [
+			250::port_250, 
+			150::port_150, 
+			120::port_120, 
+			60::port_60, 
+			30::port_30, 
+			22::port_22, 
+			11::port_11, 
+			7::port_7
+		];
     
 	// Modified to return average waiting time
 //    float get_average_waiting_time {
@@ -85,26 +186,37 @@ species charging_station {
 //	list<electric_vehicle> waiting_queue;
 	
 	// Find an available charging port
-	int find_available_port {
-		map<int, int> port_map <- [
-			250::port_250, 
-			150::port_150, 
-			120::port_120, 
-			60::port_60, 
-			30::port_30, 
-			22::port_22, 
-			11::port_11, 
-			7::port_7
-		];
-		
-		loop rate over: CHARGING_RATES {
-			if (port_map[rate] > 0) {
-				return rate;
-			}
-		}
-//		vehicles_waited <- vehicles_waited + 1;
-		return 0;
-	}
+//	int find_available_port{
+//		map<int, int> port_map <- [
+//			250::port_250, 
+//			150::port_150, 
+//			120::port_120, 
+//			60::port_60, 
+//			30::port_30, 
+//			22::port_22, 
+//			11::port_11, 
+//			7::port_7
+//		];
+//		
+//		loop rate over: CHARGING_RATES {
+//			if (port_map[rate] > 0) {
+//				return rate;
+//			}
+//		}
+////		vehicles_waited <- vehicles_waited + 1;
+//		return 0;
+//	}
+    int find_available_port(string vehicle_model) {
+        map<int, float> vehicle_charging_rates <- ev_charging_rates[vehicle_model];
+        
+        // Find highest available compatible charging rate
+        loop rate over: CHARGING_RATES sort_by (-each) {
+            if (vehicle_charging_rates[rate] > 0 and port_map[rate] > 0) {
+                return rate;
+            }
+        }
+        return 0;
+    }
 //	reflex update_waiting_time {
 //        if (!empty(waiting_queue)) {
 //            total_waiting_time <- total_waiting_time + length(waiting_queue);
@@ -211,24 +323,24 @@ species vehicle skills:[driving] {
 	list<int> peak_hours <- [7,8,9,16,17,18,19];
     list<int> business_hours <- [10,11,12,13,14,15];
     string model_name <- nil;
+    map<int, float> charging_rates;
+    
 
 	
 	init {
-		if (model_name = 'VFe34')
-		{
-			battery_capacity <- 42.0;
-			battery_threshold <- 8.0;
-		}
-		if (model_name = 'VF8')
-		{
-			battery_capacity <- 87.7;
-			battery_threshold <- 20.0;
-		}
-		if (model_name = 'VF9')
-		{
-			battery_capacity <- 123.0;
-			battery_threshold <- 20.0;
-		}
+		battery_capacity <- ev_battery_capacity[model_name];
+        battery_threshold <- ev_battery_threshold[model_name];
+        charging_rates <- ev_charging_rates[model_name];
+        
+        // Adjust consumption rate based on vehicle type
+        switch model_name {
+            match "VF9"  {battery_charging_rate <-0.15;}
+            match "VF8" {battery_charging_rate <-0.12;}
+            match "VFe34" {battery_charging_rate <- 0.08;}
+            match "IONIQ5" {battery_charging_rate <- 0.11;}
+            match "EV6"  {battery_charging_rate <- 0.11;}
+            default  {battery_charging_rate <- 0.1;}
+        }
 		proba_respect_priorities <- 0.0;
 		proba_respect_stops <- [1.0];
 		proba_use_linked_road <- 0.0;
@@ -238,9 +350,22 @@ species vehicle skills:[driving] {
 		location <- one_of(building).location;
 	}
 		// Select nearest charging station
+	
+	bool is_station_compatible(charging_station station) {
+        // Check if station has any compatible charging ports
+        loop rate over: CHARGING_RATES {
+            if (charging_rates[rate] > 0 and station.port_map[rate] > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
 	action select_charging_station {
 //        if (empty(visited_stations)) {
-        current_station <- all_stations with_min_of (each distance_to self );
+		list<charging_station> compatible_stations <- 
+            all_stations where (is_station_compatible(each));
+        
+        current_station <- compatible_stations with_min_of (each distance_to self );
 //            write preferred_station;
 //        } else {
 //            preferred_station <- all_stations where !(each in visited_stations) 
@@ -252,7 +377,7 @@ species vehicle skills:[driving] {
 //        target_cs <- preferred_station;
 //        current_station <- preferred_station; 
         if (current_station != nil) {
-        	write name + " choose charging at " + current_station.name;
+        	write name + " selecting station " + current_station.name;
         
         	do compute_path graph: road_network target: current_station.closest_intersection;
         	add current_station to: visited_stations;
@@ -269,7 +394,7 @@ species vehicle skills:[driving] {
 	action start_charging {
 //			write name+ 'at' + current_station.name;
 			try {
-			int port_rate <- current_station.find_available_port();
+			int port_rate <- current_station.find_available_port(model_name);
 //			write name + 'port_rate' +port_rate;
 			if (port_rate > 0) {
 				is_charging <- true;
@@ -317,8 +442,17 @@ species vehicle skills:[driving] {
 	}
 		// Charging process
 	reflex charging when: is_charging{
-        battery_level <- min(battery_capacity, battery_level + battery_charging_rate);
-        
+		float charge_rate <- charging_rates[charging_rate];
+		
+		// Apply charging
+        if (battery_level < battery_capacity) {
+            battery_level <- min(battery_capacity, battery_level + charge_rate);
+            
+            // Slow down charging rate above 80%
+            if (battery_level > battery_capacity * 0.8) {
+                charge_rate <- charge_rate * 0.5;
+            }
+        }
         if (battery_level >= battery_capacity) {
             do stop_charging;
             visited_stations <- [];  // Reset visited stations after successful charge

@@ -9,7 +9,7 @@ model clean_road_network
 
 global {
 	//Shapefile of the roads
-	file road_shapefile <- file("../includes/roads_Ba_Dinh.shp");
+	file road_shapefile <- file("../includes/roads_district.shp");
 	
 	//Shape of the environment
 	geometry shape <- envelope(road_shapefile);
@@ -61,7 +61,7 @@ experiment clean_network type: gui {
 		create clean_road_network_model with:[clean_data::false]; 
 		create clean_road_network_model with:[split_lines::false,reduce_to_main_connected_components::false]; 
 		create clean_road_network_model with:[split_lines::true,reduce_to_main_connected_components::false]; 
-		save road to:"../includes/roads_Ba_Dinh_clean.shp" crs:"3857" format:"shp";
+		save road to:"../includes/roads_district_clean.shp" crs:"3857" format:"shp";
 	}
 	output {
 		layout #split;
