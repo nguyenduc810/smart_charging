@@ -40,20 +40,20 @@ global {
 //    shape_file BTL <- shape_file(resources_dir + "building_Bac_Tu_Liem.shp");
 //    shape_file caugiay <- shape_file(resources_dir + "building_Cau_Giay.shp");
 //    shape_file dongda <- shape_file(resources_dir + "building_Dong_Da.shp");
-//    shape_file HBT <- shape_file(resources_dir + "building_HBT.shp");
+    shape_file HBT <- shape_file(resources_dir + "building_HBT.shp");
 //    shape_file hoankiem <- shape_file(resources_dir + "building_Hoan_Kiem.shp");
-//    shape_file hoangmai <- shape_file(resources_dir + "building_Hoang_Mai.shp");
+    shape_file hoangmai <- shape_file(resources_dir + "building_Hoang_Mai.shp");
 //    shape_file longbien <- shape_file(resources_dir + "building_Long_Bien.shp");
 //    shape_file NTL <- shape_file(resources_dir + "building_Nam_Tu_Liem.shp");
 //    shape_file tayho <- shape_file(resources_dir + "building_Tay_Ho.shp");
 //    shape_file thanhxuan <- shape_file(resources_dir + "building_Thanh_Xuan.shp");
-    shape_file district  <- shape_file(resources_dir + "building_district.shp");
+//    shape_file district  <- shape_file(resources_dir + "building_district.shp");
 	
     
 //	geometry shape <- envelope(buildings_shape_file);
-	geometry shape <- envelope(district);
+	geometry shape <- envelope(HBT);
 //	geometry shape <- envelope(commercial_shape_file);
-	shape_file charging_stations_shape <- shape_file(resources_dir+"charging_stations_v2.shp");
+	shape_file charging_stations_shape <- shape_file(resources_dir+"charging_station_HM_HBT.shp");
 //	file charging_stations_csv <- csv_file(resources_dir + "charging_stations.csv", ",");
 	// Charging rates
 	list<int> CHARGING_RATES <- [250, 150, 120, 60, 30, 22, 11, 7];
@@ -65,13 +65,13 @@ global {
 	
 
 	init {
-		create road from: shape_file(resources_dir + "roads_district_clean.shp");
+//		create road from: shape_file(resources_dir + "roads_district_clean.shp");
 //		create road from: shape_file(resources_dir + "roads_Tay_Ho_clean.shp");
 //		create road from: shape_file(resources_dir + "roads_Nam_Tu_Liem.shp");
 //		create road from: shape_file(resources_dir + "roads_Long_Bien.shp");
-//		create road from: shape_file(resources_dir + "roads_Hoang_Mai_clean.shp");
+		create road from: shape_file(resources_dir + "roads_Hoang_Mai_clean.shp");
 //		create road from: shape_file(resources_dir + "roads_Hoan_Kiem_clean.shp");
-//		create road from: shape_file(resources_dir + "roads_HBT_clean.shp");
+		create road from: shape_file(resources_dir + "roads_HBT_clean.shp");
 //		create road from: shape_file(resources_dir + "roads_Dong_Da_clean.shp");
 //		create road from: shape_file(resources_dir + "roads_Cau_Giay.shp");
 //		create road from: shape_file(resources_dir + "roads_Bac_Tu_Liem.shp");
@@ -93,12 +93,12 @@ global {
 //		create building from: BTL;
 //		create building from: caugiay;
 //		create building from: dongda;
-////		create building from: HBT;
+		create building from: HBT;
 //		create building from: hoankiem;
-//		create building from: hoangmai;
+		create building from: hoangmai;
 //		create building from: longbien;
 //		create building from: NTL;
-		create building from: district;
+//		create building from: district;
 //		create building from: tayho;
 
 			
@@ -125,15 +125,15 @@ global {
 //			write cs.port_7;
 //		}
 		do update_road_scenario(0);
-		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.3*42.0, model_name: 'VFe34')  ; 
-		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.3*87.7, model_name: 'VF8')  ; 
-		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.3*123.0, model_name: 'VF9')  ; 
-		create car number: 500 with: (all_stations: all_stations,battery_level: 0.5*42.0, model_name: 'VFe34')  ; 
-		create car number: 500 with: (all_stations: all_stations,battery_level: 0.5*87.7, model_name: 'VF8')  ; 
-		create car number: 500 with: (all_stations: all_stations,battery_level: 0.5*123.0, model_name: 'VF9')  ; 
-		create car number: 500 with: (all_stations: all_stations,battery_level: 0.8*42.0, model_name: 'VFe34')  ; 
-		create car number: 500 with: (all_stations: all_stations,battery_level: 0.8*87.7, model_name: 'VF8')  ; 
-		create car number: 500 with: (all_stations: all_stations,battery_level: 0.8*123.0, model_name: 'VF9')  ; 
+		create car number: 4000 with: (all_stations: all_stations,battery_level: 0.2*42.0, model_name: 'VFe34')  ; 
+		create car number: 4000 with: (all_stations: all_stations,battery_level: 0.2*87.7, model_name: 'VF8')  ; 
+		create car number: 4000 with: (all_stations: all_stations,battery_level: 0.2*123.0, model_name: 'VF9')  ; 
+//		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.5*42.0, model_name: 'VFe34')  ; 
+//		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.5*87.7, model_name: 'VF8')  ; 
+//		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.5*123.0, model_name: 'VF9')  ; 
+//		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.8*42.0, model_name: 'VFe34')  ; 
+//		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.8*87.7, model_name: 'VF8')  ; 
+//		create car number: 1000 with: (all_stations: all_stations,battery_level: 0.8*123.0, model_name: 'VF9')  ; 
 //		do update_car_population(cars);
 //		do update_motorbike_population( motos);
 		

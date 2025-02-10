@@ -45,7 +45,7 @@ global {
         "VF5"::7.0,
         "VF6"::12.0,
         "VF8"::20.0,
-        "VF9"::20.0,
+        "VF9"::25.0,
         // Other brands
         "IONIQ5"::15.0,
         "KONA"::12.0,
@@ -315,8 +315,10 @@ species vehicle skills:[driving] {
 	float battery_threshold <- nil;
 
 	string type;
-	building target <- nil;
-	building temp_target <- nil;
+//	building target <- nil;
+//	building temp_target <- nil;
+	intersection target <-nil;
+	intersection temp_target <-nil;
 	charging_station target_cs;
 	point shift_pt <- location ;	
 	bool at_home <- false;
@@ -333,14 +335,14 @@ species vehicle skills:[driving] {
         charging_rates <- ev_charging_rates[model_name];
         
         // Adjust consumption rate based on vehicle type
-        switch model_name {
-            match "VF9"  {battery_charging_rate <-0.15;}
-            match "VF8" {battery_charging_rate <-0.12;}
-            match "VFe34" {battery_charging_rate <- 0.08;}
-            match "IONIQ5" {battery_charging_rate <- 0.11;}
-            match "EV6"  {battery_charging_rate <- 0.11;}
-            default  {battery_charging_rate <- 0.1;}
-        }
+//        switch model_name {
+//            match "VF9"  {battery_charging_rate <-0.15;}
+//            match "VF8" {battery_charging_rate <-0.12;}
+//            match "VFe34" {battery_charging_rate <- 0.08;}
+//            match "IONIQ5" {battery_charging_rate <- 0.11;}
+//            match "EV6"  {battery_charging_rate <- 0.11;}
+//            default  {battery_charging_rate <- 0.1;}
+//        }
 		proba_respect_priorities <- 0.0;
 		proba_respect_stops <- [1.0];
 		proba_use_linked_road <- 0.0;
@@ -399,16 +401,16 @@ species vehicle skills:[driving] {
 			if (port_rate > 0) {
 				is_charging <- true;
 				charging_rate <- port_rate;
-				switch port_rate {
-				match 250 { battery_charging_rate <- 2.5; }
-				match 150 { battery_charging_rate <- 2; }
-				match 120 { battery_charging_rate <- 1.5; }
-				match 60 { battery_charging_rate <- 1.0; }
-				match 30 { battery_charging_rate <- 0.525; }
-				match 22 { battery_charging_rate <- 0.25; }
-				match 11 { battery_charging_rate <- 0.18; }
-				match 7 { battery_charging_rate <- 0.15; }
-			}
+//				switch port_rate {
+//				match 250 { battery_charging_rate <- 2.5; }
+//				match 150 { battery_charging_rate <- 2; }
+//				match 120 { battery_charging_rate <- 1.5; }
+//				match 60 { battery_charging_rate <- 1.0; }
+//				match 30 { battery_charging_rate <- 0.525; }
+//				match 22 { battery_charging_rate <- 0.25; }
+//				match 11 { battery_charging_rate <- 0.18; }
+//				match 7 { battery_charging_rate <- 0.15; }
+//			}
 				
 			write name + " started charging at " + current_station.name + " with " + port_rate + "KW port";
 					 }
@@ -459,17 +461,42 @@ species vehicle skills:[driving] {
             waiting_time <- 0.0;
         }
     }
-  	action select_target_path {
-	    float min_distance <- 2 #km;  // Minimum required distance
-	    
+//  	action select_target_path {
+//	    float min_distance <- 2 #km;  // Minimum required distance
+//	    
+//	    if temp_target = nil {
+//	        // Keep selecting a new target until we find one that's far enough
+//	        bool valid_target <- false;
+//	        loop while: !valid_target {
+//	            target <- one_of(building);
+//	            // Calculate distance to potential target
+//	            float distance_to_target <- self distance_to target;
+//	            
+//	            // Check if distance meets our minimum requirement
+//	            if (distance_to_target >= min_distance) {
+//	                valid_target <- true;
+//	            }
+//	        }
+//	    } else {
+//	        target <- temp_target;
+//	        temp_target <- nil;
+//	    }
+//	    
+//	    location <- (intersection closest_to self).location;
+//	    do compute_path graph: road_network target: target.closest_intersection; 
+//	}
+
+	action select_target_path {
+	    float min_distance <- 2 #km; // Minimum required distance
+	
 	    if temp_target = nil {
 	        // Keep selecting a new target until we find one that's far enough
 	        bool valid_target <- false;
 	        loop while: !valid_target {
-	            target <- one_of(building);
+	            target <- one_of(intersection);
 	            // Calculate distance to potential target
 	            float distance_to_target <- self distance_to target;
-	            
+	
 	            // Check if distance meets our minimum requirement
 	            if (distance_to_target >= min_distance) {
 	                valid_target <- true;
@@ -479,9 +506,9 @@ species vehicle skills:[driving] {
 	        target <- temp_target;
 	        temp_target <- nil;
 	    }
-	    
+	
 	    location <- (intersection closest_to self).location;
-	    do compute_path graph: road_network target: target.closest_intersection; 
+	    do compute_path graph: road_network target: target;
 	}
 //	action select_target_path {
 //		if temp_target =nil{
