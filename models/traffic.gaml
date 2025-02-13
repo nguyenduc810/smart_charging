@@ -1,7 +1,7 @@
 /**
 * Name: traffic
 * Based on the internal empty template. 
-* Author: minh-duc nguyen
+* Author: Minh-Duc Nguyen
 * Tags: 
 */
 
@@ -45,7 +45,7 @@ global {
         "VF5"::7.0,
         "VF6"::12.0,
         "VF8"::20.0,
-        "VF9"::25.0,
+        "VF9"::20.0,
         // Other brands
         "IONIQ5"::15.0,
         "KONA"::12.0,
@@ -108,6 +108,18 @@ global {
             7::0.076
         ]
     ];
+    string charging_stats_file <- "../includes/vehicle_charging_stats.csv";
+    string vehicle_die_file <- "../includes/vehicle_die_stats.csv";
+    
+    init {
+        // Add this to your existing init
+        string charging_headers <- "Day,Hour,Station ID,Vehicle ID,Model,Start Battery,End Battery,Charging Duration,Charging Rate\n";
+        save charging_headers to: charging_stats_file type: "text";
+        
+        string die_headers <- "Day,Hour,Vehicle ID,Model,Location,Battery Level,Distance to Nearest Station\n";
+        save die_headers to: vehicle_die_file type: "text";
+        // Rest of your init code...
+    }
 }
 
 
@@ -173,6 +185,7 @@ species charging_station {
 			11::port_11, 
 			7::port_7
 		];
+    int max_queue_size <- 2 * (port_250 + port_150 + port_120 + port_60 + port_30 + port_22 + port_11 + port_7);
     
 	// Modified to return average waiting time
 //    float get_average_waiting_time {
@@ -186,37 +199,37 @@ species charging_station {
 //	list<electric_vehicle> waiting_queue;
 	
 	// Find an available charging port
-//	int find_available_port{
-//		map<int, int> port_map <- [
-//			250::port_250, 
-//			150::port_150, 
-//			120::port_120, 
-//			60::port_60, 
-//			30::port_30, 
-//			22::port_22, 
-//			11::port_11, 
-//			7::port_7
-//		];
-//		
-//		loop rate over: CHARGING_RATES {
-//			if (port_map[rate] > 0) {
-//				return rate;
-//			}
-//		}
-////		vehicles_waited <- vehicles_waited + 1;
-//		return 0;
-//	}
-    int find_available_port(string vehicle_model) {
-        map<int, float> vehicle_charging_rates <- ev_charging_rates[vehicle_model];
-        
-        // Find highest available compatible charging rate
-        loop rate over: CHARGING_RATES sort_by (-each) {
-            if (vehicle_charging_rates[rate] > 0 and port_map[rate] > 0) {
-                return rate;
-            }
-        }
-        return 0;
-    }
+	int find_available_port{
+		map<int, int> port_map <- [
+			250::port_250, 
+			150::port_150, 
+			120::port_120, 
+			60::port_60, 
+			30::port_30, 
+			22::port_22, 
+			11::port_11, 
+			7::port_7
+		];
+		
+		loop rate over: CHARGING_RATES {
+			if (port_map[rate] > 0) {
+				return rate;
+			}
+		}
+//		vehicles_waited <- vehicles_waited + 1;
+		return 0;
+	}
+//    int find_available_port(string vehicle_model) {
+//        map<int, float> vehicle_charging_rates <- ev_charging_rates[vehicle_model];
+//        
+//        // Find highest available compatible charging rate
+//        loop rate over: CHARGING_RATES sort_by (-each) {
+//            if (vehicle_charging_rates[rate] > 0 and port_map[rate] > 0) {
+//                return rate;
+//            }
+//        }
+//        return 0;
+//    }
 //	reflex update_waiting_time {
 //        if (!empty(waiting_queue)) {
 //            total_waiting_time <- total_waiting_time + length(waiting_queue);
@@ -272,9 +285,22 @@ species charging_station {
 	}
 	
 	// Add vehicle to waiting queue
-	action add_to_queue(vehicle ev) {
-		waiting_queue << ev;
-	}
+//	action add_to_queue(vehicle ev) {
+//		waiting_queue << ev;
+//	}
+	bool add_to_queue(vehicle ev) {
+        if (length(waiting_queue) < max_queue_size) {
+            waiting_queue << ev;
+            return true;
+        } else {
+            // Queue is full
+            write name + " queue is full. Vehicle " + ev.name + " needs to find another station";
+            ask ev {
+                do find_alternative_station();
+            }
+            return false;
+        }
+    }
 	
 	// Process waiting queue
 	action process_queue {
@@ -315,10 +341,8 @@ species vehicle skills:[driving] {
 	float battery_threshold <- nil;
 
 	string type;
-//	building target <- nil;
-//	building temp_target <- nil;
-	intersection target <-nil;
-	intersection temp_target <-nil;
+	building target <- nil;
+	building temp_target <- nil;
 	charging_station target_cs;
 	point shift_pt <- location ;	
 	bool at_home <- false;
@@ -326,23 +350,17 @@ species vehicle skills:[driving] {
     list<int> business_hours <- [10,11,12,13,14,15];
     string model_name <- nil;
     map<int, float> charging_rates;
-    
+    float charging_start_time <- 0.0;
+    float charging_start_battery <- 0.0;
 
 	
 	init {
 		battery_capacity <- ev_battery_capacity[model_name];
-        battery_threshold <- ev_battery_threshold[model_name];
+//        battery_threshold <- ev_battery_threshold[model_name];
+		battery_threshold <- ev_battery_capacity[model_name]*0.2;
         charging_rates <- ev_charging_rates[model_name];
         
-        // Adjust consumption rate based on vehicle type
-//        switch model_name {
-//            match "VF9"  {battery_charging_rate <-0.15;}
-//            match "VF8" {battery_charging_rate <-0.12;}
-//            match "VFe34" {battery_charging_rate <- 0.08;}
-//            match "IONIQ5" {battery_charging_rate <- 0.11;}
-//            match "EV6"  {battery_charging_rate <- 0.11;}
-//            default  {battery_charging_rate <- 0.1;}
-//        }
+        
 		proba_respect_priorities <- 0.0;
 		proba_respect_stops <- [1.0];
 		proba_use_linked_road <- 0.0;
@@ -363,16 +381,16 @@ species vehicle skills:[driving] {
         return false;
     }
 	action select_charging_station {
-//        if (empty(visited_stations)) {
-		list<charging_station> compatible_stations <- 
-            all_stations where (is_station_compatible(each));
+        if (empty(visited_stations)) {
+//		list<charging_station> compatible_stations <- 
+//            all_stations where (each);
         
-        current_station <- compatible_stations with_min_of (each distance_to self );
+        current_station <- all_stations with_min_of (each distance_to self );
 //            write preferred_station;
-//        } else {
-//            preferred_station <- all_stations where !(each in visited_stations) 
-//                                with_min_of (each distance_to self);
-//        }
+        } else {
+            current_station <- all_stations where !(each in visited_stations) 
+                                with_min_of (each distance_to self);
+        }
         
 //        if (preferred_station != nil) {
 //        target_station <- current_station.location;
@@ -386,31 +404,71 @@ species vehicle skills:[driving] {
         	}
         else
         {write name + 'stuck';}
+        }
+//	action select_charging_station {
+//        current_station <- all_stations where (length(each.waiting_queue) < each.max_queue_size) 
+//            with_min_of (each distance_to self);
+//            
+//        if (current_station = nil) {
+//            // If all stations have full queues, pick nearest one
+//            current_station <- all_stations with_min_of (each distance_to self);
 //        }
-    }
+//        
+//        if (current_station != nil) {
+//            write name + " selecting station " + current_station.name;
+//            do compute_path graph: road_network target: current_station.closest_intersection;
+//            add current_station to: visited_stations;
+//        } else {
+//            write name + ' no available stations found';
+//        }
+//    }
     action find_alternative_station {
         waiting_time <- 0.0;
         do select_charging_station;
     }
+//	action find_alternative_station(charging_station current) {
+//        waiting_time <- 0.0;
+//        // Get all stations except the current one
+//        list<charging_station> available_stations <- all_stations where (each != current);
+//        
+//        // Find alternative station with available queue space and minimum distance
+//        charging_station alternative <- nil;
+//        
+//        // First try to find stations with available queue space
+//        list<charging_station> stations_with_space <- available_stations where 
+//            (length(each.waiting_queue) < each.max_queue_size);
+//            
+//        if (!empty(stations_with_space)) {
+//            alternative <- stations_with_space with_min_of (each distance_to self);
+//        }
+//            
+//        if (alternative != nil) {
+//            write name + " redirecting from " + current.name + " to " + alternative.name;
+//            current_station <- alternative;
+//            do compute_path graph: road_network target: current_station.closest_intersection;
+//            add current_station to: visited_stations;
+//        } else {
+//            // If no stations with available queue space found, just pick the nearest one
+//            write name + " all nearby stations full, waiting at nearest station";
+//            current_station <- available_stations with_min_of (each distance_to self);
+//            do compute_path graph: road_network target: current_station.closest_intersection;
+//            add current_station to: visited_stations;
+//        }
+//    }
 		// Start charging process
 	action start_charging {
 //			write name+ 'at' + current_station.name;
 			try {
-			int port_rate <- current_station.find_available_port(model_name);
+			int port_rate <- current_station.find_available_port();
 //			write name + 'port_rate' +port_rate;
 			if (port_rate > 0) {
 				is_charging <- true;
 				charging_rate <- port_rate;
-//				switch port_rate {
-//				match 250 { battery_charging_rate <- 2.5; }
-//				match 150 { battery_charging_rate <- 2; }
-//				match 120 { battery_charging_rate <- 1.5; }
-//				match 60 { battery_charging_rate <- 1.0; }
-//				match 30 { battery_charging_rate <- 0.525; }
-//				match 22 { battery_charging_rate <- 0.25; }
-//				match 11 { battery_charging_rate <- 0.18; }
-//				match 7 { battery_charging_rate <- 0.15; }
-//			}
+				charging_start_time <- simulation_hour;
+                charging_start_battery <- battery_level;
+					ask current_station{
+					 do occupy_port(port_rate);
+					}
 				
 			write name + " started charging at " + current_station.name + " with " + port_rate + "KW port";
 					 }
@@ -418,9 +476,10 @@ species vehicle skills:[driving] {
 //				write name + " waiting in queue at " + current_station.name;
 				ask current_station{
 					if !check_in_queue(myself){
-						do add_to_queue(myself);	
-						vehicles_waited <- vehicles_waited + 1;
-						write myself.name + " waiting in queue at " + self.name;
+						if (add_to_queue(myself))
+						{vehicles_waited <- vehicles_waited + 1;
+						write myself.name + " waiting in queue at " + self.name;}	
+						
 					}
 				}
 			}
@@ -431,6 +490,21 @@ species vehicle skills:[driving] {
 			}
 	// Stop charging
 	action stop_charging {
+		  float charging_duration <- simulation_hour - charging_start_time;
+          string stats_line <- "" + int(simulation_hour/24) + "," + 
+                           (simulation_hour mod 24) + "," +
+                           current_station.id + "," +
+                           name + "," +
+                           model_name + "," +
+                           charging_start_battery + "," +
+                           battery_level + "," +
+                           charging_duration + "," +
+                           charging_rate + "\n";
+        
+        // Save to CSV
+        	save stats_line to: charging_stats_file type: "text" rewrite: false;
+        	charging_start_time <-0;
+        	charging_start_battery <-0;
 			ask current_station{
 			do release_port(myself.charging_rate);
 			}
@@ -461,42 +535,17 @@ species vehicle skills:[driving] {
             waiting_time <- 0.0;
         }
     }
-//  	action select_target_path {
-//	    float min_distance <- 2 #km;  // Minimum required distance
-//	    
-//	    if temp_target = nil {
-//	        // Keep selecting a new target until we find one that's far enough
-//	        bool valid_target <- false;
-//	        loop while: !valid_target {
-//	            target <- one_of(building);
-//	            // Calculate distance to potential target
-//	            float distance_to_target <- self distance_to target;
-//	            
-//	            // Check if distance meets our minimum requirement
-//	            if (distance_to_target >= min_distance) {
-//	                valid_target <- true;
-//	            }
-//	        }
-//	    } else {
-//	        target <- temp_target;
-//	        temp_target <- nil;
-//	    }
-//	    
-//	    location <- (intersection closest_to self).location;
-//	    do compute_path graph: road_network target: target.closest_intersection; 
-//	}
-
-	action select_target_path {
-	    float min_distance <- 2 #km; // Minimum required distance
-	
+  	action select_target_path {
+	    float min_distance <- 2 #km;  // Minimum required distance
+	    
 	    if temp_target = nil {
 	        // Keep selecting a new target until we find one that's far enough
 	        bool valid_target <- false;
 	        loop while: !valid_target {
-	            target <- one_of(intersection);
+	            target <- one_of(building);
 	            // Calculate distance to potential target
 	            float distance_to_target <- self distance_to target;
-	
+	            
 	            // Check if distance meets our minimum requirement
 	            if (distance_to_target >= min_distance) {
 	                valid_target <- true;
@@ -506,9 +555,9 @@ species vehicle skills:[driving] {
 	        target <- temp_target;
 	        temp_target <- nil;
 	    }
-	
+	    
 	    location <- (intersection closest_to self).location;
-	    do compute_path graph: road_network target: target;
+	    do compute_path graph: road_network target: target.closest_intersection; 
 	}
 //	action select_target_path {
 //		if temp_target =nil{
@@ -597,6 +646,30 @@ species vehicle skills:[driving] {
             // Consume battery while moving
             battery_level <- battery_level - battery_consumption_rate;
             
+            if (battery_level <= 0.0) {
+                // Find nearest station for logging distance
+                charging_station nearest_station <- all_stations with_min_of (each distance_to self);
+                float distance_to_station <- self distance_to nearest_station;
+                
+                // Format the log entry
+                string die_log <- "" + 
+                    int(simulation_hour/24) + "," +  // Day
+                    (simulation_hour mod 24) + "," + // Hour
+                    name + "," +                     // Vehicle ID
+                    model_name + "," +               // Model
+                    location + "," +                 // Location
+                    battery_level + "," +            // Final battery level
+                    distance_to_station + "\n";      // Distance to nearest station
+                
+                // Save to CSV
+                save die_log to: vehicle_die_file type: "text" rewrite: false;
+                
+                // Log to console
+                write name + " CRITICAL: Vehicle stopped - completely out of battery at " + location;
+                
+                // Remove vehicle from simulation
+                do die;
+            }
             // Check if need charging
             if (battery_level < battery_threshold and current_station = nil) {
                 do select_charging_station;
